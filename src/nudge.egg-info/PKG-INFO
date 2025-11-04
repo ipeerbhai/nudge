@@ -1,19 +1,41 @@
+Metadata-Version: 2.4
+Name: nudge
+Version: 0.1.0
+Summary: Session-scoped hint cache for coding agents
+Author-email: Test User <nobody@test.com>
+License: MIT
+Keywords: mcp,hints,agents,memory,cache
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: mcp>=1.0.0
+Requires-Dist: wcmatch>=8.5
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21; extra == "dev"
+Dynamic: license-file
+
 # Nudge
 
 A lightweight memory system that stores small, high-value hints (build commands, directories, env vars) for AI coding agents. Hints are matched by context (cwd, repo, branch, OS) and ranked by relevance.
 
 ## Concept of Operations
-Coding agents often forget things as they code. We often have to "re-aim" them when they forget. Nudge is meant to help with this problem. It is essentially a dictionary of dictionaries. The top level dictionary's keys are "components", and the bottom level dictionary is "hints".
+Coding agents often forget things as they code. We often have to "re-aim" them when they forget. Nudge is meant to help with this problem. It is, essentially, a dictionary of dictionaries. The top level dictionary's keys are "components", and the bottom level dictionary is "hints".
 
 So, Imagine that you're working on an http-proxy of some sort in a docker container. The code agent is doing well, but once in a while, forgets that the code is in docker. You'd define the component as http-proxy, and the hint as build, like this:
 nudge set http-proxy build "docker compose build http-proxy".
 
-**Note:** Nudge runs as a single PRIMARY server per machine. When you run `nudge serve`:
-- If no server running → becomes PRIMARY (STDIO MCP + HTTP JSON-RPC on port 8765)
-- If server running → becomes PROXY (STDIO MCP forwarding to PRIMARY via HTTP)
-- All CLI commands use HTTP. All MCP clients get STDIO interface that shares the same data.
+**Note:** Nudge runs as a single-instance server on your machine/container. All CLI commands and MCP agents communicate with this shared server over HTTP (localhost). The server starts automatically with Claude Code, or you can start it manually with `nudge serve`.
 
-That's it. Whole idea. There's tags and other things that you can add to make it faster/easier to search, but the entire concept is that you have a store of hints per component that you and the llm share. You can add hints. The llm can add hints. You can use the hints. The llm can use the hints. No filesystem. No persistence.
+That's it. Whole idea. There's tags and other things that you can add to make it faster/easier to search, but the entire concept is that you have a store of hints per component that you and the llm share. You can add hints. The llm can add hints. You can use the hints. The llm can use the hints.
 
 ## Installation for Claude Code
 
@@ -46,13 +68,6 @@ Create or edit this file to include:
 **3. Restart Claude Code**
 
 That's it! Nudge will automatically start when Claude Code launches.
-
-### How Multiple Claude Code Instances Work
-
-- First Claude Code instance → becomes PRIMARY server (holds the hint store)
-- Additional Claude Code instances → become PROXY servers (forward to PRIMARY)
-- All instances share the same hints through the PRIMARY's in-memory store
-- CLI commands also connect to the PRIMARY via HTTP
 
 ## Adding Hints for the LLM
 
@@ -102,41 +117,17 @@ The LLM will automatically retrieve these hints when working on the frontend or 
 
 ## How It Works
 
-- **Single-instance design**: One PRIMARY server per machine; multiple PROXY servers for multiple Claude Code instances; all share the same in-memory store
+- **Context-aware**: Hints match based on cwd, git repo, branch, OS
+- **Ranked results**: Uses frecency (frequency + recency) scoring
 - **Safe by default**: Guards against accidental secret storage
 - **Session-persistent**: Hints stored in memory, cleared on restart
-
-### Architecture
-
-```
-┌─────────────┐
-│  Terminal   │────HTTP:8765────┐
-│  (CLI)      │                 │
-└─────────────┘                 ▼
-                          ┌──────────┐
-┌─────────────┐           │ PRIMARY  │
-│Claude Code#1│──STDIO───→│  Server  │
-└─────────────┘           │          │
-                          │ - Store  │
-┌─────────────┐           │ - HTTP   │
-│Claude Code#2│──STDIO──┐ │ - STDIO  │
-└─────────────┘         │ └──────────┘
-                        ▼      ▲
-                   ┌─────────┐ │
-                   │ PROXY   │─┘
-                   │ Server  │
-                   └─────────┘
-                   HTTP:8765
-```
-
-All clients (CLI + Claude Code instances) share the same hints through the PRIMARY server.
 
 ## Server Management
 
 The server runs on HTTP port 8765 by default. You can customize this:
 
 ```bash
-# Start server (auto-detects PRIMARY or PROXY mode)
+# Start server on custom port
 nudge serve --port 9000
 
 # Check if server is running
@@ -146,15 +137,7 @@ nudge status
 nudge stop
 ```
 
-### PID File
-
-The server creates a PID file at:
-- **Linux/macOS**: `/tmp/nudge/server.pid`
-- **Windows**: `%LOCALAPPDATA%\nudge\server.pid`
-
-Contains: `{"pid": 12345, "port": 8765, "started": "2025-11-04T..."}`
-
-CLI commands auto-discover the server port from this PID file. You can also specify a port explicitly:
+CLI commands auto-discover the server port from the PID file. You can also specify a port explicitly:
 
 ```bash
 nudge -p 9000 ls
@@ -163,19 +146,18 @@ nudge -p 9000 ls
 ## CLI Reference
 
 ```bash
-nudge serve [--port PORT]             # Start PRIMARY or PROXY (auto, default: 8765)
+nudge serve [--port PORT]             # Start server (default: 8765)
 nudge status                          # Check server status
 nudge stop                            # Stop server
 nudge set <component> <key> <value>   # Add hint
 nudge get <component> <key>           # Retrieve hint
 nudge query --component <name>        # Search hints
-nudge delete <component> <key>        # Delete hint
 nudge bump <component> <key>          # Mark as used
 nudge ls                              # List all components
 nudge ls <component>                  # List keys in a component
 nudge export > backup.json            # Backup
 nudge import backup.json              # Restore
-nudge -p PORT <command>               # Override port for any command
+nudge -p PORT <command>               # Use specific port
 ```
 
 ## License

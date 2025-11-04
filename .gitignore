@@ -1,0 +1,49 @@
+# Godot 4+ specific ignores
+.godot/
+.vscode/
+android/
+exports/
+
+# docker stuff
+.env
+env-deploy.txt
+
+# Minvera Project Save files
+*.minproj
+
+# binary files
+*.wav
+*.wav.import
+
+# rust targets
+target/
+
+#python
+__pycache__/
+.venv
+
+#log files
+*.log
+nohup.out
+
+#node
+node_modules/
+
+#movies
+*.mkv
+*.mp4
+
+#VSCode stuff
+.devcontainer/
+.claude/
+data/
+
+# mapped directories full of generated binaries
+experiments/CarouselMaker/output/
+experiments/comfy/input/
+experiments/comfy/models/
+experiments/comfy/output/
+experiments/comfy/user/
+
+# patch files
+*.patch
