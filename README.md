@@ -137,6 +137,11 @@ For hosts that support **remote MCP** over HTTP/WebSocket, you can connect to Nu
 
 `build`, `test`, `start`, `run`, `deploy`, `path` / `directory`, `env.*`, `tooling` (e.g., `tooling.lint`), `messages` (short schema summary).
 
+**Note:** Component names are just strings—use any naming convention. Examples:
+- Code components: `frontend`, `api`, `database`
+- Namespaced: `tools.registry`, `docs.api`, `patterns.docker`
+- Hierarchical: `project/context`, `tools/endpoints`
+
 ---
 
 ## Minimal usage patterns (language-agnostic pseudocode)
@@ -271,6 +276,88 @@ nudge import ./seed-hints.json
 ```
 
 > Add `--json` to any command for machine-readable output.
+
+---
+
+## Organizational Patterns
+
+Component names are flexible—use any naming convention that fits your workflow. Here are common patterns:
+
+### Traditional Code Components
+
+```bash
+nudge set frontend build "npm run build"
+nudge set api test "pytest tests/"
+nudge set database migrate "alembic upgrade head"
+nudge set worker start "celery -A tasks worker"
+```
+
+### Namespaced Topics (Dot Notation)
+
+```bash
+# Tool metadata
+nudge set tools.registry github '{"version": "1.0.0", "status": "installed"}'
+nudge set tools.endpoints api-server '{"url": "http://localhost:3000", "health": "/health"}'
+
+# Project documentation
+nudge set docs.api summary "REST API with 12 endpoints, auth via JWT"
+nudge set docs.architecture overview "Microservices: api, frontend, worker + Redis"
+
+# Reusable patterns
+nudge set patterns.docker build "docker compose build --no-cache"
+nudge set patterns.git commit-msg "feat(scope): description [closes #123]"
+nudge set patterns.test unit "pytest -v tests/unit/"
+```
+
+### Hierarchical Organization (Slash Notation)
+
+```bash
+# Tool registry hierarchy
+nudge set tools/registry/github installed "v1.0.0"
+nudge set tools/registry/mcp-files endpoint "stdio://mcp-files"
+
+# Project context
+nudge set project/context/structure overview "Monorepo: api, frontend, worker"
+nudge set project/context/conventions style "kebab-case files, PascalCase components"
+
+# Environment-specific
+nudge set env/dev/database url "postgresql://localhost/dev"
+nudge set env/prod/database url "postgresql://db.example.com/prod"
+```
+
+### Context Summaries (JIT Detail Fetching)
+
+Store summaries, fetch details only when needed:
+
+```bash
+# Store lightweight summary
+nudge set docs.openapi summary "12 endpoints: users, posts, comments, auth"
+
+# Store full spec separately (fetch only when needed)
+nudge set docs.openapi spec '{"openapi": "3.0", "paths": {...}}'
+
+# Agent flow:
+# 1. Check summary first (lightweight)
+# 2. Fetch full spec only when actually needed
+```
+
+### Cross-Cutting Concerns
+
+```bash
+# Secrets management (metadata only—never store actual secrets!)
+nudge set secrets.vault location "vault.example.com/minerva/dev"
+nudge set secrets.providers api "AWS Secrets Manager"
+
+# Monitoring/observability
+nudge set monitoring.metrics endpoint "http://prometheus:9090"
+nudge set monitoring.traces collector "jaeger-collector:14268"
+
+# Build/deployment metadata
+nudge set ci.pipeline url "https://github.com/org/repo/actions"
+nudge set deploy.staging last-commit "abc123f"
+```
+
+**Key insight:** The component parameter accepts any string identifier. Organize hints however makes sense for your project—traditional components, namespaced topics, hierarchies, or any combination.
 
 ---
 
