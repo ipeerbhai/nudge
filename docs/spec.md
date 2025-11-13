@@ -170,7 +170,7 @@ Each read response includes:
 
 ### Methods
 
-1. **`nudge.set_hint`** — upsert a hint
+1. **`nudge_set_hint`** — upsert a hint
    **params**
 
    ```json
@@ -196,7 +196,7 @@ Each read response includes:
    {"hint": { /* full Hint */ }}
    ```
 
-2. **`nudge.get_hint`** — fetch best match for (component,key)
+2. **`nudge_get_hint`** — fetch best match for (component,key)
    **params**
 
    ```json
@@ -212,7 +212,7 @@ Each read response includes:
    }
    ```
 
-3. **`nudge.query`** — search by component/keys/tags/regex
+3. **`nudge_query`** — search by component/keys/tags/regex
    **params**
 
    ```json
@@ -232,22 +232,22 @@ Each read response includes:
    {"hints": [{ "hint": { /* Hint */ }, "score": 0.88, "match_explain": { ... } }]}
    ```
 
-4. **`nudge.delete_hint`**
+4. **`nudge_delete_hint`**
    **params** `{"component":"http-proxy","key":"build"}`
    **result** `{"deleted": true, "previous": { /* Hint */ }}`
 
-5. **`nudge.list_components`**
+5. **`nudge_list_components`**
    **result** `{"components": [{"name":"http-proxy","hint_count":3}, ...]}`
 
-6. **`nudge.bump`** — increase frecency after successful use
+6. **`nudge_bump`** — increase frecency after successful use
    **params** `{"component":"http-proxy","key":"build","delta":1}`
    **result** `{"hint": { /* updated counts/timestamps */ }}`
 
-7. **`nudge.export`**
+7. **`nudge_export`**
    **params** `{"format":"json"}`
    **result** `{"payload": { /* NudgeStore subset */ }}`
 
-8. **`nudge.import`**
+8. **`nudge_import`**
    **params** `{"payload": { /* NudgeStore subset */ }, "mode":"merge"}`
    **result** `{"imported": 12, "skipped": 0}`
 
@@ -356,10 +356,10 @@ nudge import ./seed-hints.json
 2. Agent calls:
 
    ```json
-   {"method":"nudge.get_hint","params":{"component":"http-proxy","key":"build","context":{"cwd":"/work/minerva/http-proxy","branch":"dev","os":"linux"}}}
+   {"method":"nudge_get_hint","params":{"component":"http-proxy","key":"build","context":{"cwd":"/work/minerva/http-proxy","branch":"dev","os":"linux"}}}
    ```
 3. Nudge returns the build command plus `match_explain`.
-4. Agent runs the command; upon success, calls `nudge.bump` to reinforce.
+4. Agent runs the command; upon success, calls `nudge_bump` to reinforce.
 
 ### B) Fixing a Build Error (Agent)
 
@@ -367,7 +367,7 @@ nudge import ./seed-hints.json
 2. Agent calls:
 
    ```json
-   {"method":"nudge.query","params":{"component":"http-proxy","tags":["build"],"context":{"cwd":"/work/minerva/http-proxy","os":"linux"},"limit":3}}
+   {"method":"nudge_query","params":{"component":"http-proxy","tags":["build"],"context":{"cwd":"/work/minerva/http-proxy","os":"linux"},"limit":3}}
    ```
 3. Nudge returns a ranked list; top item includes `docker compose build router`.
 4. Agent retries with suggested command; on success calls `bump`.
@@ -392,7 +392,7 @@ nudge import ./seed-hints.json
 
    ```json
    {
-     "method":"nudge.set_hint",
+     "method":"nudge_set_hint",
      "params":{
        "component":"api",
        "key":"env.FEATURE_X",

@@ -149,11 +149,11 @@ For hosts that support **remote MCP** over HTTP/WebSocket, you can connect to Nu
 ### 1) Read before running
 
 ```pseudo
-hint = nudge.get_hint(component="http-proxy", key="build",
+hint = nudge_get_hint(component="http-proxy", key="build",
                       context={cwd, repo, branch, os})
 if hint.exists:
   run(hint.value)         // do not modify; execute as-is
-  nudge.bump("http-proxy", "build")
+  nudge_bump("http-proxy", "build")
 else:
   // derive command as usual
 ```
@@ -161,7 +161,7 @@ else:
 ### 2) Store a corrected command
 
 ```pseudo
-nudge.set_hint(component="http-proxy", key="build",
+nudge_set_hint(component="http-proxy", key="build",
                value="docker compose build router",
                meta={tags:["build","docker"], reason:"user correction", ttl:"session"})
 ```
@@ -169,7 +169,7 @@ nudge.set_hint(component="http-proxy", key="build",
 ### 3) Store compact analysis results
 
 ```pseudo
-nudge.set_hint(component="core", key="messages",
+nudge_set_hint(component="core", key="messages",
                value="json {subject, date, body}",
                meta={tags:["messages","core"], reason:"analysis", ttl:"session"})
 ```
@@ -177,20 +177,20 @@ nudge.set_hint(component="core", key="messages",
 ### 4) Discover what’s available
 
 ```pseudo
-comps = nudge.list_components()
-hints  = nudge.query({component:"http-proxy", limit:10, context:{cwd, branch, os}})
+comps = nudge_list_components()
+hints  = nudge_query({component:"http-proxy", limit:10, context:{cwd, branch, os}})
 ```
 
 ### 5) Handle surprises (errors)
 
 ```pseudo
-results = nudge.query({component, tags:["build","test"], context:{cwd, branch, os}, limit:3})
+results = nudge_query({component, tags:["build","test"], context:{cwd, branch, os}, limit:3})
 if results.any:
   try_top_hint()
-  on_success: nudge.bump(component, results[0].key)
+  on_success: nudge_bump(component, results[0].key)
 else:
   // solve normally, then:
-  nudge.set_hint(component, learned_key, learned_value,
+  nudge_set_hint(component, learned_key, learned_value,
                  meta={tags:["fix"], reason:"post-error fix", ttl:"session"})
 ```
 
@@ -365,7 +365,7 @@ nudge set deploy.staging last-commit "abc123f"
 
 All methods return JSON and include a `match_explain` block where relevant.
 
-### `nudge.set_hint`
+### `nudge_set_hint`
 
 Upsert a hint.
 
@@ -386,7 +386,7 @@ Upsert a hint.
 }
 ```
 
-### `nudge.get_hint`
+### `nudge_get_hint`
 
 Fetch best match for `(component, key)` given a context.
 
@@ -407,7 +407,7 @@ Fetch best match for `(component, key)` given a context.
 }
 ```
 
-### `nudge.query`
+### `nudge_query`
 
 Search by component/keys/tags/regex (ranked by frecency/priority/confidence/scope specificity/recency).
 
@@ -422,25 +422,25 @@ Search by component/keys/tags/regex (ranked by frecency/priority/confidence/scop
 }
 ```
 
-### `nudge.delete_hint`
+### `nudge_delete_hint`
 
 ```json
 { "component": "http-proxy", "key": "build" }
 ```
 
-### `nudge.list_components`
+### `nudge_list_components`
 
 ```json
 {}
 ```
 
-### `nudge.bump`
+### `nudge_bump`
 
 ```json
 { "component": "http-proxy", "key": "build", "delta": 1 }
 ```
 
-### `nudge.export` / `nudge.import`
+### `nudge_export` / `nudge_import`
 
 ```json
 { "format": "json" }   // export
@@ -454,14 +454,14 @@ Search by component/keys/tags/regex (ranked by frecency/priority/confidence/scop
 ### A) Fresh repo, agent warm-start
 
 1. Agent enters `/work/minerva/http-proxy` on branch `dev` (Linux).
-2. Calls `nudge.get_hint("http-proxy","build", context)`.
+2. Calls `nudge_get_hint("http-proxy","build", context)`.
 3. Nudge returns the right `docker compose` incantation + explanation.
-4. Agent runs it, then calls `nudge.bump` on success.
+4. Agent runs it, then calls `nudge_bump` on success.
 
 ### B) Fixing a build failure
 
 1. Build fails with `service router not found`.
-2. Agent calls `nudge.query({component:"http-proxy", tags:["build"], context, limit:3})`.
+2. Agent calls `nudge_query({component:"http-proxy", tags:["build"], context, limit:3})`.
 3. Tries the top scored hint; on success, calls `bump`.
 
 ### C) OS-specific directories (human first)

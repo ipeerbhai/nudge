@@ -59,7 +59,7 @@ class NudgeServer:
             """List available Nudge tools."""
             return [
                 Tool(
-                    name="nudge.set_hint",
+                    name="nudge_set_hint",
                     description="Set or update a hint in the store",
                     inputSchema={
                         "type": "object",
@@ -74,7 +74,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.get_hint",
+                    name="nudge_get_hint",
                     description="Get the best matching hint for a component and key",
                     inputSchema={
                         "type": "object",
@@ -87,7 +87,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.query",
+                    name="nudge_query",
                     description="Search for hints by component, keys, tags, or regex",
                     inputSchema={
                         "type": "object",
@@ -102,7 +102,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.delete_hint",
+                    name="nudge_delete_hint",
                     description="Delete a hint from the store",
                     inputSchema={
                         "type": "object",
@@ -114,12 +114,12 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.list_components",
+                    name="nudge_list_components",
                     description="List all components with hint counts",
                     inputSchema={"type": "object", "properties": {}},
                 ),
                 Tool(
-                    name="nudge.bump",
+                    name="nudge_bump",
                     description="Increase frecency counter after successful hint use",
                     inputSchema={
                         "type": "object",
@@ -132,7 +132,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.export",
+                    name="nudge_export",
                     description="Export the entire store or subset",
                     inputSchema={
                         "type": "object",
@@ -142,7 +142,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.import",
+                    name="nudge_import",
                     description="Import hints from a payload",
                     inputSchema={
                         "type": "object",
@@ -159,21 +159,21 @@ class NudgeServer:
         async def call_tool(name: str, arguments: Any) -> List[TextContent]:
             """Handle tool calls."""
             try:
-                if name == "nudge.set_hint":
+                if name == "nudge_set_hint":
                     result = await self._handle_set_hint(arguments)
-                elif name == "nudge.get_hint":
+                elif name == "nudge_get_hint":
                     result = await self._handle_get_hint(arguments)
-                elif name == "nudge.query":
+                elif name == "nudge_query":
                     result = await self._handle_query(arguments)
-                elif name == "nudge.delete_hint":
+                elif name == "nudge_delete_hint":
                     result = await self._handle_delete_hint(arguments)
-                elif name == "nudge.list_components":
+                elif name == "nudge_list_components":
                     result = await self._handle_list_components(arguments)
-                elif name == "nudge.bump":
+                elif name == "nudge_bump":
                     result = await self._handle_bump(arguments)
-                elif name == "nudge.export":
+                elif name == "nudge_export":
                     result = await self._handle_export(arguments)
-                elif name == "nudge.import":
+                elif name == "nudge_import":
                     result = await self._handle_import(arguments)
                 else:
                     return [TextContent(type="text", text=json.dumps({"error": "Unknown tool"}))]
@@ -465,21 +465,21 @@ class NudgeServer:
 
         try:
             # Route to appropriate handler
-            if method == "nudge.set_hint":
+            if method == "nudge_set_hint":
                 result = await self._handle_set_hint(params)
-            elif method == "nudge.get_hint":
+            elif method == "nudge_get_hint":
                 result = await self._handle_get_hint(params)
-            elif method == "nudge.query":
+            elif method == "nudge_query":
                 result = await self._handle_query(params)
-            elif method == "nudge.delete_hint":
+            elif method == "nudge_delete_hint":
                 result = await self._handle_delete_hint(params)
-            elif method == "nudge.list_components":
+            elif method == "nudge_list_components":
                 result = await self._handle_list_components(params)
-            elif method == "nudge.bump":
+            elif method == "nudge_bump":
                 result = await self._handle_bump(params)
-            elif method == "nudge.export":
+            elif method == "nudge_export":
                 result = await self._handle_export(params)
-            elif method == "nudge.import":
+            elif method == "nudge_import":
                 result = await self._handle_import(params)
             else:
                 return {
@@ -537,7 +537,7 @@ class NudgeServer:
             # Return same tool list as primary
             return [
                 Tool(
-                    name="nudge.set_hint",
+                    name="nudge_set_hint",
                     description="Set or update a hint in the store",
                     inputSchema={
                         "type": "object",
@@ -552,7 +552,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.get_hint",
+                    name="nudge_get_hint",
                     description="Get the best matching hint for a component and key",
                     inputSchema={
                         "type": "object",
@@ -565,7 +565,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.query",
+                    name="nudge_query",
                     description="Search for hints by component, keys, tags, or regex",
                     inputSchema={
                         "type": "object",
@@ -580,7 +580,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.delete_hint",
+                    name="nudge_delete_hint",
                     description="Delete a hint from the store",
                     inputSchema={
                         "type": "object",
@@ -592,12 +592,12 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.list_components",
+                    name="nudge_list_components",
                     description="List all components with hint counts",
                     inputSchema={"type": "object", "properties": {}},
                 ),
                 Tool(
-                    name="nudge.bump",
+                    name="nudge_bump",
                     description="Increase frecency counter after successful hint use",
                     inputSchema={
                         "type": "object",
@@ -610,7 +610,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.export",
+                    name="nudge_export",
                     description="Export the entire store or subset",
                     inputSchema={
                         "type": "object",
@@ -620,7 +620,7 @@ class NudgeServer:
                     },
                 ),
                 Tool(
-                    name="nudge.import",
+                    name="nudge_import",
                     description="Import hints from a payload",
                     inputSchema={
                         "type": "object",
@@ -638,7 +638,7 @@ class NudgeServer:
             """Forward tool calls to PRIMARY via HTTP."""
             try:
                 # Forward to HTTP backend based on method
-                if name == "nudge.set_hint":
+                if name == "nudge_set_hint":
                     result = client.set_hint(
                         arguments["component"],
                         arguments["key"],
@@ -646,13 +646,13 @@ class NudgeServer:
                         arguments.get("meta"),
                         arguments.get("if_match_version")
                     )
-                elif name == "nudge.get_hint":
+                elif name == "nudge_get_hint":
                     result = client.get_hint(
                         arguments["component"],
                         arguments["key"],
                         arguments.get("context")
                     )
-                elif name == "nudge.query":
+                elif name == "nudge_query":
                     result = client.query(
                         arguments.get("component"),
                         arguments.get("keys"),
@@ -661,22 +661,22 @@ class NudgeServer:
                         arguments.get("context"),
                         arguments.get("limit", 10)
                     )
-                elif name == "nudge.delete_hint":
+                elif name == "nudge_delete_hint":
                     result = client.delete_hint(
                         arguments["component"],
                         arguments["key"]
                     )
-                elif name == "nudge.list_components":
+                elif name == "nudge_list_components":
                     result = client.list_components()
-                elif name == "nudge.bump":
+                elif name == "nudge_bump":
                     result = client.bump(
                         arguments["component"],
                         arguments["key"],
                         arguments.get("delta", 1)
                     )
-                elif name == "nudge.export":
+                elif name == "nudge_export":
                     result = client.export(arguments.get("format", "json"))
-                elif name == "nudge.import":
+                elif name == "nudge_import":
                     result = client.import_hints(
                         arguments["payload"],
                         arguments.get("mode", "merge")

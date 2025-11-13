@@ -122,7 +122,7 @@ class NudgeClient:
         if if_match_version is not None:
             params['if_match_version'] = if_match_version
 
-        return self._call_rpc('nudge.set_hint', params)
+        return self._call_rpc('nudge_set_hint', params)
 
     def get_hint(
         self,
@@ -138,7 +138,7 @@ class NudgeClient:
         if context:
             params['context'] = context
 
-        return self._call_rpc('nudge.get_hint', params)
+        return self._call_rpc('nudge_get_hint', params)
 
     def query(
         self,
@@ -162,7 +162,7 @@ class NudgeClient:
         if context:
             params['context'] = context
 
-        return self._call_rpc('nudge.query', params)
+        return self._call_rpc('nudge_query', params)
 
     def delete_hint(self, component: str, key: str) -> Dict:
         """Delete a hint."""
@@ -170,11 +170,11 @@ class NudgeClient:
             'component': component,
             'key': key,
         }
-        return self._call_rpc('nudge.delete_hint', params)
+        return self._call_rpc('nudge_delete_hint', params)
 
     def list_components(self) -> Dict:
         """List all components."""
-        return self._call_rpc('nudge.list_components', {})
+        return self._call_rpc('nudge_list_components', {})
 
     def bump(self, component: str, key: str, delta: int = 1) -> Dict:
         """Increase frecency counter."""
@@ -183,12 +183,12 @@ class NudgeClient:
             'key': key,
             'delta': delta,
         }
-        return self._call_rpc('nudge.bump', params)
+        return self._call_rpc('nudge_bump', params)
 
     def export(self, format: str = 'json') -> Dict:
         """Export the store."""
         params = {'format': format}
-        return self._call_rpc('nudge.export', params)
+        return self._call_rpc('nudge_export', params)
 
     def import_hints(self, payload: Dict, mode: str = 'merge') -> Dict:
         """Import hints."""
@@ -196,4 +196,4 @@ class NudgeClient:
             'payload': payload,
             'mode': mode,
         }
-        return self._call_rpc('nudge.import', params)
+        return self._call_rpc('nudge_import', params)
