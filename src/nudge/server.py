@@ -200,6 +200,188 @@ class NudgeServer:
                 }
                 return [TextContent(type="text", text=json.dumps(error_response))]
 
+    async def _handle_initialize(self, params: Dict) -> Dict:
+        """
+        Handle MCP initialize request.
+
+        Returns server capabilities and protocol version.
+        """
+        # Get client's requested protocol version
+        client_protocol = params.get("protocolVersion", "2025-06-18")
+
+        # Return initialize result
+        return {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+                "tools": {},  # We support tools
+            },
+            "serverInfo": {
+                "name": "nudge",
+                "version": "0.1.0",
+            }
+        }
+
+    async def _handle_tools_list(self, params: Dict) -> Dict:
+        """
+        Handle MCP tools/list request.
+
+        Returns list of available tools with their schemas.
+        """
+        tools = [
+            {
+                "name": "nudge_set_hint",
+                "description": "Set or update a hint in the store",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["component", "key", "value"],
+                    "properties": {
+                        "component": {"type": "string", "minLength": 1},
+                        "key": {"type": "string", "minLength": 1},
+                        "value": {},
+                        "meta": {"type": "object"},
+                        "if_match_version": {"type": "integer", "minimum": 0},
+                    },
+                },
+            },
+            {
+                "name": "nudge_get_hint",
+                "description": "Get the best matching hint for a component and key",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["component", "key"],
+                    "properties": {
+                        "component": {"type": "string"},
+                        "key": {"type": "string"},
+                        "context": {"type": "object"},
+                    },
+                },
+            },
+            {
+                "name": "nudge_query",
+                "description": "Search for hints by component, keys, tags, or regex",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "component": {"type": "string"},
+                        "keys": {"type": "array", "items": {"type": "string"}},
+                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "regex": {"type": "string"},
+                        "context": {"type": "object"},
+                        "limit": {"type": "integer", "minimum": 1, "default": 10},
+                    },
+                },
+            },
+            {
+                "name": "nudge_delete_hint",
+                "description": "Delete a hint from the store",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["component", "key"],
+                    "properties": {
+                        "component": {"type": "string"},
+                        "key": {"type": "string"},
+                    },
+                },
+            },
+            {
+                "name": "nudge_list_components",
+                "description": "List all components with hint counts",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "nudge_bump",
+                "description": "Increase frecency counter after successful hint use",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["component", "key"],
+                    "properties": {
+                        "component": {"type": "string"},
+                        "key": {"type": "string"},
+                        "delta": {"type": "integer", "minimum": 1, "default": 1},
+                    },
+                },
+            },
+            {
+                "name": "nudge_export",
+                "description": "Export the entire store or subset",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "format": {"type": "string", "enum": ["json"], "default": "json"}
+                    },
+                },
+            },
+            {
+                "name": "nudge_import",
+                "description": "Import hints from a payload",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["payload"],
+                    "properties": {
+                        "payload": {"type": "object"},
+                        "mode": {"type": "string", "enum": ["merge", "replace"], "default": "merge"},
+                    },
+                },
+            },
+        ]
+
+        return {"tools": tools}
+
+    async def _handle_tools_call(self, params: Dict) -> Dict:
+        """
+        Handle MCP tools/call request.
+
+        Invokes a tool by name and returns the result.
+        """
+        tool_name = params.get("name")
+        arguments = params.get("arguments", {})
+
+        try:
+            # Route to appropriate tool handler
+            if tool_name == "nudge_set_hint":
+                result = await self._handle_set_hint(arguments)
+            elif tool_name == "nudge_get_hint":
+                result = await self._handle_get_hint(arguments)
+            elif tool_name == "nudge_query":
+                result = await self._handle_query(arguments)
+            elif tool_name == "nudge_delete_hint":
+                result = await self._handle_delete_hint(arguments)
+            elif tool_name == "nudge_list_components":
+                result = await self._handle_list_components(arguments)
+            elif tool_name == "nudge_bump":
+                result = await self._handle_bump(arguments)
+            elif tool_name == "nudge_export":
+                result = await self._handle_export(arguments)
+            elif tool_name == "nudge_import":
+                result = await self._handle_import(arguments)
+            else:
+                return {
+                    "content": [{"type": "text", "text": json.dumps({"error": f"Unknown tool: {tool_name}"})}],
+                    "isError": True
+                }
+
+            # Return result in MCP tools/call format
+            return {
+                "content": [{"type": "text", "text": json.dumps(result)}]
+            }
+
+        except NudgeStoreError as e:
+            return {
+                "content": [{"type": "text", "text": json.dumps({
+                    "error": {
+                        "code": e.code.value,
+                        "message": e.message,
+                        "data": e.data
+                    }
+                })}],
+                "isError": True
+            }
+        except Exception as e:
+            return {
+                "content": [{"type": "text", "text": json.dumps({"error": str(e)})}],
+                "isError": True
+            }
+
     async def _handle_set_hint(self, args: Dict) -> Dict:
         """Handle set_hint tool call."""
         component = args["component"]
@@ -465,7 +647,20 @@ class NudgeServer:
 
         try:
             # Route to appropriate handler
-            if method == "nudge_set_hint":
+            # MCP protocol methods
+            if method == "initialize":
+                result = await self._handle_initialize(params)
+            elif method == "initialized":
+                # Notification - no response needed, but we return empty result
+                result = {}
+            elif method == "ping":
+                result = {}
+            elif method == "tools/list":
+                result = await self._handle_tools_list(params)
+            elif method == "tools/call":
+                result = await self._handle_tools_call(params)
+            # Nudge tool methods (direct calls, for backward compatibility)
+            elif method == "nudge_set_hint":
                 result = await self._handle_set_hint(params)
             elif method == "nudge_get_hint":
                 result = await self._handle_get_hint(params)

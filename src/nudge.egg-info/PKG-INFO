@@ -21,6 +21,8 @@ Requires-Dist: wcmatch>=8.5
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.21; extra == "dev"
+Requires-Dist: httpx>=0.24; extra == "dev"
+Requires-Dist: pytest-timeout>=2.0; extra == "dev"
 Dynamic: license-file
 
 # Nudge

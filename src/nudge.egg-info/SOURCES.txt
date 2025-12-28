@@ -8,6 +8,8 @@ src/nudge/client.py
 src/nudge/http_server.py
 src/nudge/lock.py
 src/nudge/server.py
+src/nudge/session.py
+src/nudge/sse.py
 src/nudge.egg-info/PKG-INFO
 src/nudge.egg-info/SOURCES.txt
 src/nudge.egg-info/dependency_links.txt
@@ -22,6 +24,15 @@ src/nudge/core/scoring.py
 src/nudge/core/store.py
 src/nudge/utils/__init__.py
 src/nudge/utils/context.py
+tests/test_batch.py
+tests/test_http_responses.py
+tests/test_http_server.py
 tests/test_matching.py
+tests/test_mcp_methods.py
+tests/test_protocol_compliance.py
+tests/test_proxy_compat.py
 tests/test_safety.py
+tests/test_session.py
+tests/test_session_lifecycle.py
+tests/test_sse.py
 tests/test_store.py

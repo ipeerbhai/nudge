@@ -348,9 +348,18 @@ def pretty_print(result: dict, json_mode: bool):
                 for reason in match["reasons"]:
                     print(f"    - {reason}")
         elif "components" in result:
-            print("Components:")
-            for comp in result["components"]:
-                print(f"  {comp['name']}: {comp['hint_count']} hint(s)")
+            components = result["components"]
+            # Export format: components is a dict with schema_version
+            if "schema_version" in result:
+                print(json.dumps(result, indent=2))
+            # List-components format: components is a list
+            elif isinstance(components, list):
+                print("Components:")
+                for comp in components:
+                    print(f"  {comp['name']}: {comp['hint_count']} hint(s)")
+            else:
+                # Fallback for other dict formats
+                print(json.dumps(result, indent=2))
         elif "keys" in result:
             print(f"Keys in '{result['component']}':")
             if result['keys']:
