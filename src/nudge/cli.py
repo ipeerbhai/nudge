@@ -3,6 +3,7 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Optional
 
 from .client import NudgeClient, NudgeClientError
@@ -90,6 +91,28 @@ def create_parser() -> argparse.ArgumentParser:
     import_parser = subparsers.add_parser("import", help="Import hints from JSON file")
     import_parser.add_argument("file", help="JSON file to import")
     import_parser.add_argument("--mode", default="merge", choices=["merge", "replace"])
+
+    # blob-upload command
+    blob_upload_parser = subparsers.add_parser("blob-upload", help="Upload a file as a blob")
+    blob_upload_parser.add_argument("file", help="File to upload")
+    blob_upload_parser.add_argument("--content-type", help="MIME type (auto-detected if not provided)")
+    blob_upload_parser.add_argument("--filename", help="Override filename")
+
+    # blob-download command
+    blob_download_parser = subparsers.add_parser("blob-download", help="Download a blob")
+    blob_download_parser.add_argument("blob_id", help="Blob ID to download")
+    blob_download_parser.add_argument("-o", "--output", help="Output file (default: stdout)")
+
+    # blob-list command
+    blob_list_parser = subparsers.add_parser("blob-list", help="List all blobs")
+
+    # blob-delete command
+    blob_delete_parser = subparsers.add_parser("blob-delete", help="Delete a blob")
+    blob_delete_parser.add_argument("blob_id", help="Blob ID to delete")
+
+    # blob-info command
+    blob_info_parser = subparsers.add_parser("blob-info", help="Get blob metadata")
+    blob_info_parser.add_argument("blob_id", help="Blob ID to get info for")
 
     return parser
 
@@ -332,6 +355,74 @@ def cmd_import(client: NudgeClient, args) -> dict:
     return {"imported": result.get('imported', 0), "skipped": result.get('skipped', 0)}
 
 
+def cmd_blob_upload(client: NudgeClient, args) -> dict:
+    """Handle blob-upload command."""
+    file_path = Path(args.file)
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {args.file}")
+
+    with open(file_path, "rb") as f:
+        data = f.read()
+
+    filename = args.filename if args.filename else file_path.name
+    content_type = getattr(args, 'content_type', None)
+
+    result = client.blob_upload(data, filename, content_type)
+
+    return {
+        "blob_id": result.get("blob_id"),
+        "filename": result.get("filename"),
+        "size": result.get("size"),
+        "content_type": result.get("content_type"),
+        "checksum": result.get("checksum"),
+    }
+
+
+def cmd_blob_download(client: NudgeClient, args) -> dict:
+    """Handle blob-download command."""
+    data, metadata = client.blob_download(args.blob_id)
+
+    if args.output:
+        with open(args.output, "wb") as f:
+            f.write(data)
+        return {
+            "downloaded": True,
+            "blob_id": args.blob_id,
+            "output": args.output,
+            "size": len(data),
+        }
+    else:
+        # Write to stdout in binary mode
+        sys.stdout.buffer.write(data)
+        return None  # No pretty output for binary
+
+
+def cmd_blob_list(client: NudgeClient, args) -> dict:
+    """Handle blob-list command."""
+    result = client.blob_list()
+    return {"blobs": result.get("blobs", [])}
+
+
+def cmd_blob_delete(client: NudgeClient, args) -> dict:
+    """Handle blob-delete command."""
+    client.blob_delete(args.blob_id)
+    return {"deleted": True, "blob_id": args.blob_id}
+
+
+def cmd_blob_info(client: NudgeClient, args) -> dict:
+    """Handle blob-info command."""
+    result = client.blob_info(args.blob_id)
+    return {
+        "blob_id": result.get("blob_id"),
+        "filename": result.get("filename"),
+        "content_type": result.get("content_type"),
+        "size": result.get("size"),
+        "created_at": result.get("created_at"),
+        "checksum": result.get("checksum"),
+    }
+
+
 def pretty_print(result: dict, json_mode: bool):
     """Pretty print result."""
     if json_mode:
@@ -378,8 +469,35 @@ def pretty_print(result: dict, json_mode: bool):
                 print()
         elif "success" in result:
             print(f"✓ Set {result['component']}/{result['key']} (v{result['version']})")
+        elif "deleted" in result and "blob_id" in result:
+            print(f"✓ Deleted blob {result['blob_id']}")
         elif "deleted" in result:
             print(f"✓ Deleted {result['component']}/{result['key']}")
+        elif "blobs" in result:
+            blobs = result["blobs"]
+            if not blobs:
+                print("No blobs stored")
+            else:
+                print(f"Blobs ({len(blobs)}):")
+                for blob in blobs:
+                    print(f"  {blob['blob_id']}")
+                    print(f"    filename: {blob.get('filename', 'N/A')}")
+                    print(f"    size: {blob.get('size', 0)} bytes")
+                    print(f"    type: {blob.get('content_type', 'N/A')}")
+                    print()
+        elif "blob_id" in result and "checksum" in result and "size" in result:
+            # blob-upload or blob-info result
+            if "downloaded" in result:
+                print(f"✓ Downloaded blob {result['blob_id']} to {result['output']}")
+                print(f"  size: {result['size']} bytes")
+            else:
+                print(f"Blob: {result['blob_id']}")
+                print(f"  filename: {result.get('filename', 'N/A')}")
+                print(f"  size: {result.get('size', 0)} bytes")
+                print(f"  type: {result.get('content_type', 'N/A')}")
+                if 'created_at' in result:
+                    print(f"  created: {result['created_at']}")
+                print(f"  checksum: {result.get('checksum', 'N/A')}")
         elif "use_count" in result:
             print(f"↑ Bumped {result['component']}/{result['key']}")
             print(f"  use_count: {result['use_count']}")
@@ -442,11 +560,22 @@ def main():
             result = cmd_export(client, args)
         elif args.command == "import":
             result = cmd_import(client, args)
+        elif args.command == "blob-upload":
+            result = cmd_blob_upload(client, args)
+        elif args.command == "blob-download":
+            result = cmd_blob_download(client, args)
+        elif args.command == "blob-list":
+            result = cmd_blob_list(client, args)
+        elif args.command == "blob-delete":
+            result = cmd_blob_delete(client, args)
+        elif args.command == "blob-info":
+            result = cmd_blob_info(client, args)
         else:
             parser.print_help()
             sys.exit(1)
 
-        pretty_print(result, args.json)
+        if result is not None:  # blob-download to stdout returns None
+            pretty_print(result, args.json)
 
     except NudgeClientError as e:
         if args.json:

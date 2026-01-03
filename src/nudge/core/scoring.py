@@ -95,10 +95,12 @@ class Scorer:
         frecency = Scorer.calculate_frecency(hint.use_count, hint.last_used_at)
 
         # Priority component (normalize to 0-1, default 5)
-        priority = (hint.meta.priority or 5) / 10.0 if hint.meta else 0.5
+        # Cast to float in case priority was stored as string in JSON
+        priority = float(hint.meta.priority or 5) / 10.0 if hint.meta else 0.5
 
         # Confidence component (default 0.5)
-        confidence = hint.meta.confidence or 0.5 if hint.meta else 0.5
+        # Cast to float in case confidence was stored as string in JSON
+        confidence = float(hint.meta.confidence or 0.5) if hint.meta else 0.5
 
         # Scope specificity component
         specificity_count = Matcher.count_scope_specificity(

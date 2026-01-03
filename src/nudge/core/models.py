@@ -77,8 +77,17 @@ class JsonValue:
     data: Any = None
 
 
+@dataclass
+class BlobReference:
+    """Reference to a blob for use in hints."""
+    type: Literal["blob_ref"] = "blob_ref"
+    blob_id: str = ""
+    content_type: Optional[str] = None
+    size: Optional[int] = None
+
+
 # Union type for all hint values
-HintValue = Union[str, CommandValue, PathValue, TemplateValue, JsonValue]
+HintValue = Union[str, CommandValue, PathValue, TemplateValue, JsonValue, BlobReference]
 
 
 @dataclass
@@ -169,3 +178,7 @@ class ErrorCode(Enum):
     E_SECRET_REJECTED = 40002
     E_SCOPE_INVALID = 40003
     E_QUOTA = 42901
+    # Blob-specific errors
+    E_BLOB_TOO_LARGE = 41301
+    E_BLOB_NOT_FOUND = 40402
+    E_BLOB_QUOTA = 42902

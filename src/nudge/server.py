@@ -8,6 +8,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
+import base64
 from .core.store import Store, NudgeStoreError
 from .core.models import (
     Hint,
@@ -27,6 +28,7 @@ from .core.models import (
 )
 from .core.scoring import Scorer
 from .core.safety import SafetyGuard
+from .core.blob_store import BlobStore, BlobStoreError
 from .http_server import NudgeHTTPServer
 from .lock import ServerLock
 
@@ -43,6 +45,7 @@ class NudgeServer:
         self.store = Store(
             max_components=int(os.getenv("NUDGE_MAX_HINTS", "5000")),
         )
+        self.blob_store = BlobStore()
         self.secret_guard_enabled = os.getenv("NUDGE_SECRET_GUARD", "1") == "1"
         self.server = Server("nudge")
         self.http_server = None
@@ -153,6 +156,63 @@ class NudgeServer:
                         },
                     },
                 ),
+                Tool(
+                    name="nudge_blob_upload",
+                    description="Upload a binary blob (base64 encoded)",
+                    inputSchema={
+                        "type": "object",
+                        "required": ["data", "filename"],
+                        "properties": {
+                            "data": {"type": "string", "description": "Base64-encoded binary data"},
+                            "filename": {"type": "string"},
+                            "content_type": {"type": "string"},
+                            "scope": {"type": "string", "enum": ["session", "global"], "default": "global"},
+                        },
+                    },
+                ),
+                Tool(
+                    name="nudge_blob_download",
+                    description="Download a blob (returns base64 encoded data)",
+                    inputSchema={
+                        "type": "object",
+                        "required": ["blob_id"],
+                        "properties": {
+                            "blob_id": {"type": "string"},
+                        },
+                    },
+                ),
+                Tool(
+                    name="nudge_blob_list",
+                    description="List all blobs with metadata",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "scope": {"type": "string", "enum": ["session", "global", "all"], "default": "all"},
+                        },
+                    },
+                ),
+                Tool(
+                    name="nudge_blob_delete",
+                    description="Delete a blob",
+                    inputSchema={
+                        "type": "object",
+                        "required": ["blob_id"],
+                        "properties": {
+                            "blob_id": {"type": "string"},
+                        },
+                    },
+                ),
+                Tool(
+                    name="nudge_blob_info",
+                    description="Get blob metadata without downloading",
+                    inputSchema={
+                        "type": "object",
+                        "required": ["blob_id"],
+                        "properties": {
+                            "blob_id": {"type": "string"},
+                        },
+                    },
+                ),
             ]
 
         @self.server.call_tool()
@@ -175,11 +235,29 @@ class NudgeServer:
                     result = await self._handle_export(arguments)
                 elif name == "nudge_import":
                     result = await self._handle_import(arguments)
+                elif name == "nudge_blob_upload":
+                    result = await self._handle_blob_upload(arguments)
+                elif name == "nudge_blob_download":
+                    result = await self._handle_blob_download(arguments)
+                elif name == "nudge_blob_list":
+                    result = await self._handle_blob_list(arguments)
+                elif name == "nudge_blob_delete":
+                    result = await self._handle_blob_delete(arguments)
+                elif name == "nudge_blob_info":
+                    result = await self._handle_blob_info(arguments)
                 else:
                     return [TextContent(type="text", text=json.dumps({"error": "Unknown tool"}))]
 
                 return [TextContent(type="text", text=json.dumps(result))]
 
+            except BlobStoreError as e:
+                error_response = {
+                    "error": {
+                        "code": e.code.value,
+                        "message": e.message,
+                    }
+                }
+                return [TextContent(type="text", text=json.dumps(error_response))]
             except NudgeStoreError as e:
                 error_response = {
                     "error": {
@@ -323,6 +401,63 @@ class NudgeServer:
                     },
                 },
             },
+            {
+                "name": "nudge_blob_upload",
+                "description": "Upload a binary blob (base64 encoded)",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["data", "filename"],
+                    "properties": {
+                        "data": {"type": "string", "description": "Base64-encoded binary data"},
+                        "filename": {"type": "string"},
+                        "content_type": {"type": "string"},
+                        "scope": {"type": "string", "enum": ["session", "global"], "default": "global"},
+                    },
+                },
+            },
+            {
+                "name": "nudge_blob_download",
+                "description": "Download a blob (returns base64 encoded data)",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["blob_id"],
+                    "properties": {
+                        "blob_id": {"type": "string"},
+                    },
+                },
+            },
+            {
+                "name": "nudge_blob_list",
+                "description": "List all blobs with metadata",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "scope": {"type": "string", "enum": ["session", "global", "all"], "default": "all"},
+                    },
+                },
+            },
+            {
+                "name": "nudge_blob_delete",
+                "description": "Delete a blob",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["blob_id"],
+                    "properties": {
+                        "blob_id": {"type": "string"},
+                    },
+                },
+            },
+            {
+                "name": "nudge_blob_info",
+                "description": "Get blob metadata without downloading",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["blob_id"],
+                    "properties": {
+                        "blob_id": {"type": "string"},
+                    },
+                },
+            },
         ]
 
         return {"tools": tools}
@@ -354,6 +489,16 @@ class NudgeServer:
                 result = await self._handle_export(arguments)
             elif tool_name == "nudge_import":
                 result = await self._handle_import(arguments)
+            elif tool_name == "nudge_blob_upload":
+                result = await self._handle_blob_upload(arguments)
+            elif tool_name == "nudge_blob_download":
+                result = await self._handle_blob_download(arguments)
+            elif tool_name == "nudge_blob_list":
+                result = await self._handle_blob_list(arguments)
+            elif tool_name == "nudge_blob_delete":
+                result = await self._handle_blob_delete(arguments)
+            elif tool_name == "nudge_blob_info":
+                result = await self._handle_blob_info(arguments)
             else:
                 return {
                     "content": [{"type": "text", "text": json.dumps({"error": f"Unknown tool: {tool_name}"})}],
@@ -365,6 +510,16 @@ class NudgeServer:
                 "content": [{"type": "text", "text": json.dumps(result)}]
             }
 
+        except BlobStoreError as e:
+            return {
+                "content": [{"type": "text", "text": json.dumps({
+                    "error": {
+                        "code": e.code.value,
+                        "message": e.message,
+                    }
+                })}],
+                "isError": True
+            }
         except NudgeStoreError as e:
             return {
                 "content": [{"type": "text", "text": json.dumps({
@@ -569,6 +724,111 @@ class NudgeServer:
 
         return {"imported": imported, "skipped": skipped}
 
+    async def _handle_blob_upload(self, args: Dict) -> Dict:
+        """Handle blob upload tool call (base64 encoded data)."""
+        data_b64 = args["data"]
+        filename = args["filename"]
+        content_type = args.get("content_type")
+        scope = args.get("scope", "global")
+
+        # Decode base64 data
+        data = base64.b64decode(data_b64)
+
+        # Session ID only if scope is "session"
+        session_id = None  # TODO: Get from session context when available
+
+        metadata = self.blob_store.upload(
+            data=data,
+            filename=filename,
+            content_type=content_type,
+            session_id=session_id if scope == "session" else None,
+        )
+
+        return {
+            "blob_id": metadata.blob_id,
+            "filename": metadata.filename,
+            "content_type": metadata.content_type,
+            "size": metadata.size,
+            "checksum": metadata.checksum,
+        }
+
+    async def _handle_blob_download(self, args: Dict) -> Dict:
+        """Handle blob download tool call (returns base64 encoded data)."""
+        blob_id = args["blob_id"]
+
+        result = self.blob_store.download(blob_id)
+        if result is None:
+            raise BlobStoreError(
+                ErrorCode.E_BLOB_NOT_FOUND, f"Blob {blob_id} not found"
+            )
+
+        data, metadata = result
+
+        return {
+            "blob_id": metadata.blob_id,
+            "data": base64.b64encode(data).decode("ascii"),
+            "filename": metadata.filename,
+            "content_type": metadata.content_type,
+            "size": metadata.size,
+        }
+
+    async def _handle_blob_list(self, args: Dict) -> Dict:
+        """Handle blob list tool call."""
+        scope = args.get("scope", "all")
+
+        # Filter by session if scope specified
+        session_id = None
+        if scope == "session":
+            session_id = None  # TODO: Get from session context when available
+
+        blobs = self.blob_store.list_blobs(session_id=session_id if scope == "session" else None)
+
+        return {
+            "blobs": [
+                {
+                    "blob_id": b.blob_id,
+                    "filename": b.filename,
+                    "content_type": b.content_type,
+                    "size": b.size,
+                    "created_at": b.created_at,
+                    "session_id": b.session_id,
+                }
+                for b in blobs
+            ]
+        }
+
+    async def _handle_blob_delete(self, args: Dict) -> Dict:
+        """Handle blob delete tool call."""
+        blob_id = args["blob_id"]
+
+        deleted = self.blob_store.delete(blob_id)
+        if not deleted:
+            raise BlobStoreError(
+                ErrorCode.E_BLOB_NOT_FOUND, f"Blob {blob_id} not found"
+            )
+
+        return {"deleted": True}
+
+    async def _handle_blob_info(self, args: Dict) -> Dict:
+        """Handle blob info tool call (metadata without data)."""
+        blob_id = args["blob_id"]
+
+        metadata = self.blob_store.get_metadata(blob_id)
+        if metadata is None:
+            raise BlobStoreError(
+                ErrorCode.E_BLOB_NOT_FOUND, f"Blob {blob_id} not found"
+            )
+
+        return {
+            "blob_id": metadata.blob_id,
+            "filename": metadata.filename,
+            "content_type": metadata.content_type,
+            "size": metadata.size,
+            "created_at": metadata.created_at,
+            "session_id": metadata.session_id,
+            "checksum": metadata.checksum,
+        }
+
     def _parse_context(self, context_dict: Dict) -> NudgeContext:
         """Parse context dictionary into NudgeContext."""
         os_str = context_dict.get("os")
@@ -676,6 +936,17 @@ class NudgeServer:
                 result = await self._handle_export(params)
             elif method == "nudge_import":
                 result = await self._handle_import(params)
+            # Blob tool methods
+            elif method == "nudge_blob_upload":
+                result = await self._handle_blob_upload(params)
+            elif method == "nudge_blob_download":
+                result = await self._handle_blob_download(params)
+            elif method == "nudge_blob_list":
+                result = await self._handle_blob_list(params)
+            elif method == "nudge_blob_delete":
+                result = await self._handle_blob_delete(params)
+            elif method == "nudge_blob_info":
+                result = await self._handle_blob_info(params)
             else:
                 return {
                     'jsonrpc': '2.0',
@@ -689,6 +960,15 @@ class NudgeServer:
                 'id': rpc_id
             }
 
+        except BlobStoreError as e:
+            return {
+                'jsonrpc': '2.0',
+                'error': {
+                    'code': e.code.value,
+                    'message': e.message,
+                },
+                'id': rpc_id
+            }
         except NudgeStoreError as e:
             return {
                 'jsonrpc': '2.0',
@@ -916,7 +1196,7 @@ class NudgeServer:
         import asyncio
 
         # Create and start HTTP server
-        self.http_server = NudgeHTTPServer(self._handle_rpc_request, port)
+        self.http_server = NudgeHTTPServer(self._handle_rpc_request, port, blob_store=self.blob_store)
         actual_port = self.http_server.start()
 
         # Try to acquire lock with actual port

@@ -3,11 +3,13 @@
 import json
 import asyncio
 import os
+import re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Callable, Dict, Any, Optional, Tuple
 import logging
 
 from .session import SessionManager, Session
+from .core.blob_store import BlobStore, BlobStoreError
 
 logger = logging.getLogger("nudge")
 
@@ -113,6 +115,11 @@ class JSONRPCHandler(BaseHTTPRequestHandler):
         try:
             # Validate Origin header (security)
             if not self._validate_origin():
+                return
+
+            # Route blob uploads separately (binary, not JSON)
+            if self.path == "/blobs":
+                self._handle_blob_upload()
                 return
 
             # Read request body
@@ -258,7 +265,7 @@ class JSONRPCHandler(BaseHTTPRequestHandler):
             self._send_json_response(responses, session_id=session_id)
 
     def do_GET(self):
-        """Handle GET requests (health check and SSE streams)."""
+        """Handle GET requests (health check, SSE streams, blob downloads)."""
         if self.path == "/health":
             response = {
                 "status": "ok",
@@ -270,6 +277,12 @@ class JSONRPCHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif self.path == "/blobs":
+            # List all blobs
+            self._handle_blob_list()
+        elif self.path.startswith("/blobs/"):
+            # Download specific blob
+            self._handle_blob_download()
         elif self.path == "/" or self.path == "":
             # MCP endpoint - check if SSE is requested
             accept = self.headers.get("Accept", "")
@@ -314,8 +327,13 @@ class JSONRPCHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def do_DELETE(self):
-        """Handle DELETE requests for session termination."""
-        # Only handle the MCP endpoint
+        """Handle DELETE requests for session termination and blob deletion."""
+        # Handle blob deletion
+        if self.path.startswith("/blobs/"):
+            self._handle_blob_delete()
+            return
+
+        # Only handle the MCP endpoint for session termination
         if self.path != "/" and self.path != "":
             self.send_error(404, "Not Found")
             return
@@ -338,10 +356,184 @@ class JSONRPCHandler(BaseHTTPRequestHandler):
         # Terminate the session
         session_mgr.terminate_session(session_id)
 
+        # Also clean up session-scoped blobs
+        if hasattr(self.server, 'blob_store'):
+            self.server.blob_store.cleanup_session_blobs(session_id)
+
         # Return 202 Accepted
         self.send_response(202)
         self.send_header("MCP-Protocol-Version", MCP_PROTOCOL_VERSION)
         self.end_headers()
+
+    def _parse_content_disposition(self) -> Optional[str]:
+        """Parse filename from Content-Disposition header."""
+        cd = self.headers.get("Content-Disposition", "")
+        if not cd:
+            return None
+
+        # Look for filename="..." or filename*=...
+        match = re.search(r'filename="([^"]+)"', cd)
+        if match:
+            return match.group(1)
+
+        match = re.search(r"filename=([^\s;]+)", cd)
+        if match:
+            return match.group(1)
+
+        return None
+
+    def _handle_blob_upload(self):
+        """Handle POST /blobs - Upload a new blob."""
+        try:
+            # Check Content-Length
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length == 0:
+                # Allow empty blobs, just unusual
+                pass
+
+            # Check size limit before reading
+            if content_length > BlobStore.MAX_BLOB_SIZE:
+                self.send_error(413, f"Payload too large (max {BlobStore.MAX_BLOB_SIZE} bytes)")
+                return
+
+            # Read binary data (don't decode as UTF-8!)
+            data = self.rfile.read(content_length)
+
+            # Get metadata from headers
+            content_type = self.headers.get("Content-Type", "application/octet-stream")
+            filename = self._parse_content_disposition()
+            session_id = self._get_session_id()
+
+            # Get scope from header
+            scope = self.headers.get("X-Nudge-Blob-Scope", "global")
+            blob_session_id = session_id if scope == "session" else None
+
+            # Store blob
+            blob_store = self.server.blob_store
+            metadata = blob_store.upload(
+                data=data,
+                filename=filename,
+                content_type=content_type,
+                session_id=blob_session_id,
+            )
+
+            # Return 201 Created with Location header
+            response = {
+                "blob_id": metadata.blob_id,
+                "filename": metadata.filename,
+                "content_type": metadata.content_type,
+                "size": metadata.size,
+                "checksum": metadata.checksum,
+                "created_at": metadata.created_at,
+            }
+
+            body = json.dumps(response).encode("utf-8")
+            self.send_response(201)
+            self.send_header("Location", f"/blobs/{metadata.blob_id}")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        except BlobStoreError as e:
+            self.send_error(413 if "size" in str(e).lower() else 507, str(e))
+        except Exception as e:
+            logger.exception("Error uploading blob")
+            self.send_error(500, str(e))
+
+    def _handle_blob_download(self):
+        """Handle GET /blobs/{id} - Download a blob."""
+        try:
+            # Extract blob ID from path
+            blob_id = self.path.split("/blobs/")[1]
+            if not blob_id:
+                self.send_error(400, "Blob ID required")
+                return
+
+            blob_store = self.server.blob_store
+            result = blob_store.download(blob_id)
+
+            if result is None:
+                self.send_error(404, "Blob not found")
+                return
+
+            data, metadata = result
+
+            # Send binary response
+            self.send_response(200)
+            self.send_header("Content-Type", metadata.content_type)
+            self.send_header("Content-Length", str(metadata.size))
+            if metadata.filename:
+                self.send_header(
+                    "Content-Disposition",
+                    f'attachment; filename="{metadata.filename}"'
+                )
+            self.send_header("ETag", f'"{metadata.checksum}"')
+            self.send_header("X-Nudge-Blob-Id", metadata.blob_id)
+            self.end_headers()
+            self.wfile.write(data)
+
+        except Exception as e:
+            logger.exception("Error downloading blob")
+            self.send_error(500, str(e))
+
+    def _handle_blob_list(self):
+        """Handle GET /blobs - List all blobs."""
+        try:
+            session_id = self._get_session_id()
+            blob_store = self.server.blob_store
+
+            # Get all blobs (optionally filtered by session in the future)
+            blobs = blob_store.list_blobs()
+
+            response = {
+                "blobs": [
+                    {
+                        "blob_id": b.blob_id,
+                        "filename": b.filename,
+                        "content_type": b.content_type,
+                        "size": b.size,
+                        "created_at": b.created_at,
+                        "checksum": b.checksum,
+                    }
+                    for b in blobs
+                ]
+            }
+
+            body = json.dumps(response).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        except Exception as e:
+            logger.exception("Error listing blobs")
+            self.send_error(500, str(e))
+
+    def _handle_blob_delete(self):
+        """Handle DELETE /blobs/{id} - Delete a blob."""
+        try:
+            # Extract blob ID from path
+            blob_id = self.path.split("/blobs/")[1]
+            if not blob_id:
+                self.send_error(400, "Blob ID required")
+                return
+
+            blob_store = self.server.blob_store
+            deleted = blob_store.delete(blob_id)
+
+            if not deleted:
+                self.send_error(404, "Blob not found")
+                return
+
+            # Return 204 No Content
+            self.send_response(204)
+            self.end_headers()
+
+        except Exception as e:
+            logger.exception("Error deleting blob")
+            self.send_error(500, str(e))
 
 
 class NudgeHTTPServer:
@@ -351,7 +543,8 @@ class NudgeHTTPServer:
         self,
         rpc_handler: Callable,
         port: int = 8765,
-        session_manager: Optional[SessionManager] = None
+        session_manager: Optional[SessionManager] = None,
+        blob_store: Optional[BlobStore] = None
     ):
         """
         Initialize HTTP server.
@@ -360,12 +553,14 @@ class NudgeHTTPServer:
             rpc_handler: Async function to handle RPC requests
             port: Port to bind to (will auto-increment if taken)
             session_manager: Optional session manager. If not provided, creates one.
+            blob_store: Optional blob store. If not provided, creates one.
         """
         self.rpc_handler = rpc_handler
         self.requested_port = port
         self.actual_port = None
         self.httpd = None
         self.session_manager = session_manager or SessionManager()
+        self.blob_store = blob_store or BlobStore()
 
     def start(self) -> int:
         """
@@ -385,6 +580,7 @@ class NudgeHTTPServer:
                 self.httpd = HTTPServer(("localhost", port), JSONRPCHandler)
                 self.httpd.rpc_handler = self.rpc_handler
                 self.httpd.session_manager = self.session_manager
+                self.httpd.blob_store = self.blob_store
                 # Get actual port (important when port=0 is used for auto-assign)
                 self.actual_port = self.httpd.server_address[1]
                 logger.info(f"HTTP server bound to localhost:{self.actual_port}")

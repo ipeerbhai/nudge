@@ -197,3 +197,137 @@ class NudgeClient:
             'mode': mode,
         }
         return self._call_rpc('nudge_import', params)
+
+    def blob_upload(
+        self,
+        data: bytes,
+        filename: str,
+        content_type: Optional[str] = None
+    ) -> Dict:
+        """
+        Upload a blob via HTTP.
+
+        Args:
+            data: Binary data to upload
+            filename: Filename for the blob
+            content_type: MIME type (auto-detected if not provided)
+
+        Returns:
+            Dict with blob_id, size, content_type, checksum
+        """
+        url = f"http://localhost:{self.port}/blobs"
+
+        headers = {}
+        if content_type:
+            headers['Content-Type'] = content_type
+        else:
+            headers['Content-Type'] = 'application/octet-stream'
+        headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        try:
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers=headers,
+                method='POST'
+            )
+
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                return json.loads(response.read().decode('utf-8'))
+
+        except urllib.error.URLError as e:
+            raise NudgeClientError(f"Server not found on port {self.port}")
+        except urllib.error.HTTPError as e:
+            raise NudgeClientError(f"HTTP error {e.code}: {e.reason}")
+        except json.JSONDecodeError:
+            raise NudgeClientError("Invalid response from server")
+
+    def blob_download(self, blob_id: str) -> tuple:
+        """
+        Download a blob via HTTP.
+
+        Args:
+            blob_id: ID of the blob to download
+
+        Returns:
+            Tuple of (data, metadata_dict)
+        """
+        url = f"http://localhost:{self.port}/blobs/{blob_id}"
+
+        try:
+            req = urllib.request.Request(url, method='GET')
+
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                data = response.read()
+                metadata = {
+                    'content_type': response.headers.get('Content-Type', 'application/octet-stream'),
+                    'content_length': response.headers.get('Content-Length'),
+                }
+                return data, metadata
+
+        except urllib.error.URLError as e:
+            raise NudgeClientError(f"Server not found on port {self.port}")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                raise NudgeClientError(f"Blob {blob_id} not found")
+            raise NudgeClientError(f"HTTP error {e.code}: {e.reason}")
+
+    def blob_list(self) -> Dict:
+        """
+        List all blobs.
+
+        Returns:
+            Dict with 'blobs' list
+        """
+        url = f"http://localhost:{self.port}/blobs"
+
+        try:
+            req = urllib.request.Request(url, method='GET')
+
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                return json.loads(response.read().decode('utf-8'))
+
+        except urllib.error.URLError as e:
+            raise NudgeClientError(f"Server not found on port {self.port}")
+        except urllib.error.HTTPError as e:
+            raise NudgeClientError(f"HTTP error {e.code}: {e.reason}")
+        except json.JSONDecodeError:
+            raise NudgeClientError("Invalid response from server")
+
+    def blob_delete(self, blob_id: str) -> bool:
+        """
+        Delete a blob.
+
+        Args:
+            blob_id: ID of the blob to delete
+
+        Returns:
+            True if deleted
+        """
+        url = f"http://localhost:{self.port}/blobs/{blob_id}"
+
+        try:
+            req = urllib.request.Request(url, method='DELETE')
+
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                return response.status == 204
+
+        except urllib.error.URLError as e:
+            raise NudgeClientError(f"Server not found on port {self.port}")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                raise NudgeClientError(f"Blob {blob_id} not found")
+            raise NudgeClientError(f"HTTP error {e.code}: {e.reason}")
+
+    def blob_info(self, blob_id: str) -> Dict:
+        """
+        Get blob metadata without downloading data.
+
+        Args:
+            blob_id: ID of the blob
+
+        Returns:
+            Dict with blob metadata
+        """
+        params = {'blob_id': blob_id}
+        return self._call_rpc('nudge_blob_info', params)
