@@ -26,7 +26,50 @@ def test_detect_jwt():
 
 def test_detect_hex_key():
     """Test detection of long hex strings (potential keys)."""
-    value = "a" * 32  # 32 character hex string
+    # Use mixed case/numbers that's NOT a UUID pattern (34+ chars or mixed case short strings)
+    value = "aAbBcCdDeEfF0123456789aAbBcCdDeEf"  # 32 chars with mixed case
+
+    has_secret, reason = SafetyGuard.check_for_secrets(value)
+
+    assert has_secret is True
+
+
+def test_uuid7_32_hex_not_flagged():
+    """Test that UUID7 32-char hex format is not flagged as a secret."""
+    value = "019d2bc4772071528197a59240dee61f"  # Real UUID7 from Docket
+
+    has_secret, reason = SafetyGuard.check_for_secrets(value)
+
+    assert has_secret is False
+
+
+def test_uuid_dashed_format_not_flagged():
+    """Test that standard UUID 8-4-4-4-12 dashed format is not flagged as a secret."""
+    value = "019d2bc4-7720-7152-8197-a59240dee61f"
+
+    has_secret, reason = SafetyGuard.check_for_secrets(value)
+
+    assert has_secret is False
+
+
+def test_docket_item_id_not_flagged():
+    """Test that Docket item IDs (UUID7 format) are not flagged as secrets."""
+    # Multiple real examples
+    values = [
+        "019d2bc4772071528197a59240dee61f",
+        "01a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4",
+        "01234567890abcdef01234567890abcd",
+    ]
+
+    for value in values:
+        has_secret, reason = SafetyGuard.check_for_secrets(value)
+        assert has_secret is False, f"UUID {value} should not be flagged as secret"
+
+
+def test_actual_hex_key_still_flagged():
+    """Test that non-UUID hex keys are still detected."""
+    # Mix of numbers and high hex chars that's not a valid UUID
+    value = "abcdef0123456789abcdef0123456789ab"  # 34 chars, not a UUID pattern
 
     has_secret, reason = SafetyGuard.check_for_secrets(value)
 

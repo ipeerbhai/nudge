@@ -14,8 +14,8 @@ class SafetyGuard:
     SECRET_PATTERNS = [
         # AWS keys
         re.compile(r"AKIA[0-9A-Z]{16}"),
-        # Generic API keys (32-64 hex chars)
-        re.compile(r"\b[0-9a-fA-F]{32,64}\b"),
+        # Generic API keys (32-64 hex chars) — exclude UUIDs (32-char hex or 8-4-4-4-12 dashed format)
+        re.compile(r"\b(?![\da-f]{32}\b)(?![0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b)[0-9a-fA-F]{32,64}\b"),
         # JWT tokens
         re.compile(r"\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
         # Private keys
